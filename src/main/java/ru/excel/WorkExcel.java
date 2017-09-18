@@ -11,7 +11,6 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.hibernate.Session;
-import ru.DAO.UserDAOImpl;
 import ru.model.CKCBase;
 import ru.model.GVIBase;
 import ru.model.Model;
@@ -77,7 +76,7 @@ public class WorkExcel {
         return result;
     }
 
-    public TabPane parseToApplicationGVI(File file, TreeView<String>treeView, ArrayList<TabPane>arrayList){
+    public TabPane parseToApplicationGVI(File file, TreeView<String>treeView, ArrayList<TabPane>arrayList,Session s){
 
         //**********************
         //***Create new Table***
@@ -134,8 +133,6 @@ public class WorkExcel {
         modelGVI.setModelId((long)1);
         log.debug(modelGVI.toString());
         //UserDAOImpl userDAO = new UserDAOImpl();
-        UserDAOImpl.init(); // Открытие соед. с БД
-        Session s = UserDAOImpl.sessionFactory.getCurrentSession();
         s.beginTransaction();
         s.save(modelGVI);
        // s.getTransaction().commit();
@@ -248,15 +245,13 @@ public class WorkExcel {
         try {
             in.close();
             s.getTransaction().commit();
-            UserDAOImpl.destroy(); // Закрытие соед. с БД
         } catch (IOException e) {
             log.debug("Файл не был открыт");
         }
-
         return tabPane;
     }
 
-    public TabPane parseToApplicationCKC(File file, TreeView<String>treeView, ArrayList<TabPane>arrayList){
+    public TabPane parseToApplicationCKC(File file, TreeView<String>treeView, ArrayList<TabPane>arrayList, Session s){
 
         //**********************
         //***Create new Table***
@@ -283,8 +278,6 @@ public class WorkExcel {
         Model modelCKC = new Model("СКС", "Модель СКС-07");
        // modelCKC.setModelId((long)1);
         log.debug(modelCKC.toString());
-        UserDAOImpl.init(); // Открытие соед. с БД
-        Session s = UserDAOImpl.sessionFactory.getCurrentSession();
         s.beginTransaction();
         s.save(modelCKC);
 
@@ -342,8 +335,7 @@ public class WorkExcel {
         }
         try {
             in.close();
-            s.getTransaction().commit();
-            UserDAOImpl.destroy(); // Закрытие соед. с БД
+            s.getTransaction().commit();// Закрытие соед. с БД
         } catch (IOException e) {
             log.debug("Файл не был открыт");
         }

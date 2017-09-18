@@ -30,3 +30,4 @@ local.properties
 proguard-project.txt
 project.properties
 ant.properties
+src/main/test/java/
