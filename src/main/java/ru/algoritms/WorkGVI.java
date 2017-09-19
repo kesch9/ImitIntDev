@@ -1,4 +1,4 @@
-package ru.aloritms;
+package ru.algoritms;
 
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
@@ -6,8 +6,12 @@ import javafx.animation.Timeline;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
+import org.hibernate.Criteria;
 import org.hibernate.Session;
+import org.hibernate.criterion.Restrictions;
+import ru.DAO.UserDAOImpl;
 import ru.DAO.UserDAOb;
+import ru.model.GVIBase;
 import ru.model.Model;
 
 import java.util.ArrayList;
@@ -34,10 +38,12 @@ public class WorkGVI {
     boolean disMufta = false;
     boolean disAlarm = false;
 
-    Integer speed = 5000;
+    Integer speed = 10000;
 
 
-    public VBox create (Model model, ArrayList<TabPane> viewModel, Session session, TextArea textArea) {
+    public VBox create (Model model, ArrayList<TabPane> viewModel, TextArea textArea) {
+
+
 
         tlnOpen.setAutoReverse(true);
         Button opened = new Button("Открыта");
@@ -110,8 +116,22 @@ public class WorkGVI {
         tlnClose.getKeyFrames().addAll(new KeyFrame(Duration.millis(speed),keyValueClose));
         slider.valueChangingProperty().addListener((observable, oldValue, newValue) -> {
             System.out.println(newValue+"I");
+
         });
         slider.valueProperty().addListener((observable, oldValue, newValue) -> {
+            UserDAOImpl.init();
+            Session session = UserDAOImpl.sessionFactory.getCurrentSession();
+            session.beginTransaction();
+            Criteria userCriteria = session.createCriteria(GVIBase.class);
+            userCriteria.add(Restrictions.and(
+                    Restrictions.eq("model.modelId",new Long(35)),
+                    Restrictions.eq("kod","3.0.0")
+            ));
+            GVIBase gvi = (GVIBase) userCriteria.uniqueResult();
+            //GVIBase gvi = (GVIBase) session.load(GVIBase.class, Long.valueOf(1300));
+            gvi.setValue(newValue.intValue());
+            session.saveOrUpdate(gvi);
+            session.getTransaction().commit();
 
             if (openingGV && newValue.intValue() == 100){
                 tlnOpen.stop();

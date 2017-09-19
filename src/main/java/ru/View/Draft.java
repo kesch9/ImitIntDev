@@ -16,12 +16,14 @@ import javafx.scene.layout.FlowPane;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import org.apache.log4j.Logger;
 import org.hibernate.Session;
 import ru.DAO.UserDAOImpl;
 import ru.DAO.UserDAOb;
 import ru.ServerThread;
 import ru.ServiceConcurrent;
-import ru.aloritms.WorkGVI;
+import ru.algoritms.WorkCKC;
+import ru.algoritms.WorkGVI;
 import ru.connect.ConnectEth;
 import ru.excel.WorkExcel;
 import ru.model.GVIBase;
@@ -46,7 +48,7 @@ public class Draft extends Application {
     //VBox vBox;
     UserDAOb userDAOImpl = new UserDAOb();
     Session session;
-
+    private static final Logger log = Logger.getLogger(Draft.class);
 
 
 
@@ -95,7 +97,7 @@ public class Draft extends Application {
         System.out.println("Init");
         textArea = new TextArea();
         textArea.appendText("Init\n");
-        UserDAOImpl.init(); // Открытие соед. с БД
+        UserDAOImpl.init();
         session = UserDAOImpl.sessionFactory.getCurrentSession();
 
     }
@@ -154,9 +156,15 @@ public class Draft extends Application {
             model = fileChooser.showOpenDialog(primaryStage);
             System.out.println(model.getAbsolutePath());
             if (model != null) {
-                arrayTabpane.add(0,workExcel.parseToApplicationGVI(model,Model,arrayTabpane,session));
-                borderPane.setCenter(arrayTabpane.get(0));
-                borderPane.setRight(new WorkGVI().create(null,null,session,textArea));
+                if (model.getName().contains("ПБЭ")){
+                    borderPane.setCenter(workExcel.parseToApplicationGVI(model,Model,arrayTabpane));
+                    borderPane.setRight(new WorkGVI().create(null,null,textArea));
+                }
+                if (model.getName().contains("СКС")){
+                    System.out.println("СКС");
+                    borderPane.setCenter(workExcel.parseToApplicationCKC(model,Model,arrayTabpane));
+                    borderPane.setRight(new WorkCKC().create(null,null));
+                }
             }
         });
         MenuItem save = new MenuItem("Save");

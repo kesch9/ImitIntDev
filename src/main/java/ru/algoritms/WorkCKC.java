@@ -1,4 +1,4 @@
-package ru.aloritms;
+package ru.algoritms;
 
 import javafx.scene.control.TabPane;
 import javafx.scene.layout.VBox;
