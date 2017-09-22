@@ -6,6 +6,8 @@ import javafx.animation.Timeline;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
+import net.wimpi.modbus.procimg.SimpleProcessImage;
+import net.wimpi.modbus.procimg.SimpleRegister;
 import org.hibernate.Criteria;
 import org.hibernate.Session;
 import org.hibernate.criterion.Restrictions;
@@ -40,8 +42,23 @@ public class WorkGVI {
 
     Integer speed = 10000;
 
+    public void writeDB(int value, int model, String kod){
+        UserDAOImpl.init();
+        Session session = UserDAOImpl.sessionFactory.getCurrentSession();
+        session.beginTransaction();
+        Criteria userCriteria = session.createCriteria(GVIBase.class);
+        userCriteria.add(Restrictions.and(
+                Restrictions.eq("model.modelId",new Long(model)),
+                Restrictions.eq("kod",kod)
+        ));
+        GVIBase gvi = (GVIBase) userCriteria.uniqueResult();
+        gvi.setValue(value);
+        session.saveOrUpdate(gvi);
+        session.getTransaction().commit();
 
-    public VBox create (Model model, ArrayList<TabPane> viewModel, TextArea textArea) {
+    }
+
+    public VBox create (Model model, ArrayList<TabPane> viewModel, TextArea textArea, SimpleProcessImage simpleProcessImage) {
 
 
 
@@ -104,9 +121,12 @@ public class WorkGVI {
             if (timer != null) {
                 timer.cancel();
             }
+            writeDB(slider.valueProperty().getValue().intValue(),35, "3.0.0");
             tlnOpen.stop();
             tlnClose.stop();
         });
+
+
         slider = new Slider(0, 100,40);
         slider.setShowTickLabels(true);
         slider.setShowTickMarks(true);
@@ -119,19 +139,8 @@ public class WorkGVI {
 
         });
         slider.valueProperty().addListener((observable, oldValue, newValue) -> {
-            UserDAOImpl.init();
-            Session session = UserDAOImpl.sessionFactory.getCurrentSession();
-            session.beginTransaction();
-            Criteria userCriteria = session.createCriteria(GVIBase.class);
-            userCriteria.add(Restrictions.and(
-                    Restrictions.eq("model.modelId",new Long(35)),
-                    Restrictions.eq("kod","3.0.0")
-            ));
-            GVIBase gvi = (GVIBase) userCriteria.uniqueResult();
-            //GVIBase gvi = (GVIBase) session.load(GVIBase.class, Long.valueOf(1300));
-            gvi.setValue(newValue.intValue());
-            session.saveOrUpdate(gvi);
-            session.getTransaction().commit();
+
+            simpleProcessImage.setRegister(1,new SimpleRegister(newValue.intValue()));
 
             if (openingGV && newValue.intValue() == 100){
                 tlnOpen.stop();
@@ -143,10 +152,12 @@ public class WorkGVI {
                 opened.setVisible(true);
                 closed.setVisible(false);
                 space.setVisible(false);
+                writeDB(slider.valueProperty().getValue().intValue(),35, "3.0.0");
             } else if (newValue.intValue() == 0){
                 opened.setVisible(false);
                 closed.setVisible(true);
                 space.setVisible(false);
+                writeDB(slider.valueProperty().getValue().intValue(),35, "3.0.0");
             } else {
                 opened.setVisible(false);
                 closed.setVisible(false);

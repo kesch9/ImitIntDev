@@ -4,11 +4,14 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
+import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
@@ -16,8 +19,14 @@ import javafx.scene.layout.FlowPane;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import net.wimpi.modbus.ModbusCoupler;
+import net.wimpi.modbus.net.ModbusTCPListener;
+import net.wimpi.modbus.procimg.SimpleProcessImage;
+import net.wimpi.modbus.procimg.SimpleRegister;
 import org.apache.log4j.Logger;
+import org.hibernate.Criteria;
 import org.hibernate.Session;
+import org.hibernate.criterion.Restrictions;
 import ru.DAO.UserDAOImpl;
 import ru.DAO.UserDAOb;
 import ru.ServerThread;
@@ -29,28 +38,36 @@ import ru.excel.WorkExcel;
 import ru.model.GVIBase;
 
 import java.io.File;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Draft extends Application {
 
-    public TreeView <String> Model;
-    public MenuBar menuBar;
-    TextArea textArea;
+    TreeView <String> Model;
+    MenuBar menuBar;
+    private TextArea textArea;
     ConnectEth connectEth;
-    ServiceConcurrent serviceConcurrent;
+    private ServiceConcurrent serviceConcurrent;
     ArrayList<ServerThread> listSocket = new ArrayList<>();
     private Stage primaryStage;
     private File model;
-    public BorderPane borderPane;
+    private BorderPane borderPane;
     WorkExcel workExcel = new WorkExcel();
     ArrayList<TabPane> arrayTabpane = new ArrayList<>();
     //VBox vBox;
     UserDAOb userDAOImpl = new UserDAOb();
-    Session session;
+    private Session session;
     private static final Logger log = Logger.getLogger(Draft.class);
+    protected SimpleProcessImage simpleProcessImage;
+    protected ModbusTCPListener listener;
 
 
+    public final int DEFAULT_UNIT_ID = 1;
 
     public void setWorkExcel(WorkExcel workExcel) {
         this.workExcel = workExcel;
@@ -69,7 +86,21 @@ public class Draft extends Application {
         primaryStage.setTitle("Имитатор интерфейсных устройств БЕТА");
         primaryStage.getIcons().add(new Image("/images/Symbol.png"));
 
-        //Рабочее окно
+        //********************************
+        //Заполним Modbus Holding Register
+        //********************************
+        simpleProcessImage = new SimpleProcessImage();
+        for (int i = 0; i<4095; i++){
+            simpleProcessImage.addRegister(new SimpleRegister(0));
+        }
+        ModbusCoupler.getReference().setProcessImage(simpleProcessImage);
+        ModbusCoupler.getReference().setMaster(false);
+        ModbusCoupler.getReference().setUnitID(DEFAULT_UNIT_ID);
+
+        //********************************
+        //*********Рабочее окно***********
+        //********************************
+
         borderPane = new BorderPane();
         borderPane.setTop(createMenu(menuBar));
         borderPane.setBottom(textArea);
@@ -77,7 +108,10 @@ public class Draft extends Application {
         System.out.println(Model.getTreeItem(0));
         primaryStage.setScene(new Scene(borderPane, 1024, 768));
 
-        // Титул
+        //********************************
+        //************Титул***************
+        //********************************
+
         ImageView title = new ImageView("/images/Title.png");
         title.autosize();
         title.setFitHeight(610);
@@ -105,8 +139,217 @@ public class Draft extends Application {
     @Override
     public void stop() throws Exception {
         UserDAOImpl.destroy();
-        System.out.println("Конец Работы Программы");
+        if (listener != null && listener.isListening()){
+            listener.stop();
+            log.debug("Modbus поток остановлен\n");
+        }
+        System.out.println("Конец Работы Программы\n");
         Platform.exit();
+    }
+
+    //********************
+    //Создание Меню Панели
+    //********************
+
+    public MenuBar createMenu (MenuBar menuBar){
+
+        Menu fileMenu = new Menu("File");
+        MenuItem open = new MenuItem("Open");
+        open.setOnAction(event -> {
+            FileChooser fileChooser =  new FileChooser();
+            fileChooser.setTitle("Откройте Excel файл описания");
+            fileChooser.getExtensionFilters().addAll(new FileChooser.ExtensionFilter("Excel Files", "*.xlsx", "*.xls"));
+
+            model = fileChooser.showOpenDialog(primaryStage);
+            System.out.println(model.getAbsolutePath());
+            if (model != null) {
+                if (model.getName().contains("ПБЭ")){
+                    borderPane.setCenter(workExcel.parseToApplicationGVI(model,Model,arrayTabpane,simpleProcessImage));
+                    borderPane.setRight(new WorkGVI().create(null,null,textArea,simpleProcessImage));
+                }
+                if (model.getName().contains("СКС")){
+                    System.out.println("СКС");
+                    borderPane.setCenter(workExcel.parseToApplicationCKC(model,Model,arrayTabpane));
+                    borderPane.setRight(new WorkCKC().create(null,null));
+                }
+            }
+        });
+        MenuItem save = new MenuItem("Save");
+        save.setOnAction(event -> {
+            textArea.appendText(userDAOImpl.createTable(userDAOImpl.connection()));
+        });
+
+        MenuItem reload =  new MenuItem("Reload");
+        reload.setOnAction(event -> {
+            readDBtest();
+        });
+
+        MenuItem exit = new MenuItem("Exit");
+        exit.setOnAction(event -> {
+            UserDAOImpl.destroy();
+            if (listener != null && listener.isListening()){
+                listener.stop();
+                log.debug("Modbus поток остановлен\n");
+            }
+            System.out.println("Конец Работы Программы\n");
+            Platform.exit();
+            });
+        fileMenu.getItems().addAll(open,save,reload,exit);
+
+        Menu imitator = new Menu("Imitator");
+        MenuItem connect = new MenuItem("Connect");
+
+        connect.setOnAction(event -> {
+            //ConnectEth connectEth = new ConnectEth(textArea,listSocket);
+            //connectEth.start();
+            try {
+                listener = new ModbusTCPListener(3, InetAddress.getByName("192.168.1.2"));
+            } catch (UnknownHostException e) {
+                log.debug("Не удалось запустить поток ModbusTCP\n");
+                textArea.appendText("Не удалось запустить поток ModbusTCP. Проверьте кабель\n");
+            }
+            listener.setPort(1234);
+            listener.start();
+            if (listener.isListening()) {
+                log.debug("ModbusTCPListener запущен\n");
+                textArea.appendText("ModbusTCPListener запущен\n");
+            }
+
+        });
+        MenuItem disconnect = new MenuItem("Disconnect");
+        disconnect.setOnAction(event -> {
+            if (connectEth != null){
+                connectEth.cancel();
+            }
+            if (listener != null &&listener.isListening()){
+
+                textArea.appendText("Modbus поток остановлен\n");
+                log.debug("Modbus поток остановлен\n");
+            }
+        });
+        MenuItem test = new MenuItem("test");
+        test.setOnAction(event -> {
+            serviceConcurrent = new ServiceConcurrent(textArea);
+            serviceConcurrent.textArea = textArea;
+            serviceConcurrent.start();
+        });
+        MenuItem stop1 = new MenuItem("stoptest");
+        stop1.setOnAction(event -> {
+            if (serviceConcurrent!=null){
+                serviceConcurrent.cancel();
+            }
+        });
+        MenuItem sendMessage = new MenuItem("SendMessage");
+        sendMessage.setOnAction(event -> {
+            TextField textField = new TextField();
+            Button send = new Button("Send");
+            send.setOnAction(event1 -> {
+                if (listSocket.size()>0 ){
+                    listSocket.get(0).sendMessage(textField.getText());
+                    //connectEth.sendMessage(listSocket.get(0),textField.getText());
+                    textField.clear();
+                } else {
+                    textArea.appendText("Нет ни одного соединения" + listSocket.size()+"\n");
+                }
+            });
+            FlowPane flowPane = new FlowPane();
+            flowPane.getChildren().addAll(textField,send);
+            borderPane.setCenter(flowPane);
+        });
+        MenuItem run = new MenuItem("Run");
+        MenuItem stop = new MenuItem("Stop");
+        run.setDisable(true);
+        stop.setDisable(true);
+        imitator.getItems().addAll(connect,disconnect,test,stop1,sendMessage,run,stop);
+        menuBar = new MenuBar();
+        menuBar.getMenus().addAll(fileMenu,imitator);
+        return menuBar;
+    }
+
+
+    //********************
+    //***Чтение из БД*****
+    //********************
+
+    public void readDBtest(){
+
+        UserDAOImpl.init();
+        Session session = UserDAOImpl.sessionFactory.getCurrentSession();
+        session.beginTransaction();
+        Criteria userCriteria = session.createCriteria(GVIBase.class);
+        userCriteria.add(Restrictions.eq("model.modelId", Long.valueOf(35)));
+        //List<GVIBase> gviBaseList = session.createQuery("from GVIBase").list();
+        List<GVIBase> gviBaseList = userCriteria.list();
+        gviBaseList.sort(Comparator.comparing(GVIBase::getGviId));
+        borderPane.setCenter(reloadTabpaneCreateGVI(gviBaseList));
+        borderPane.setRight(new WorkGVI().create(null,null,textArea,simpleProcessImage));
+        session.getTransaction().commit();
+    }
+
+    public TabPane reloadTabpaneCreateGVI(List<GVIBase> gviBaseList){
+
+        TabPane tabPane = new TabPane();
+        tabPane.setId("ПБЭ");
+        TableColumn kod = new TableColumn("Код");
+        TableColumn name = new TableColumn("Название");
+        TableColumn value = new TableColumn("Значение");
+        TableColumn unit = new TableColumn("Ед.изм.");;
+        TableColumn type = new TableColumn("Тип");;
+        TableColumn view = new TableColumn("Вид");;
+        TableColumn adres = new TableColumn("Адрес");;
+        TableColumn write = new TableColumn("Запись");;
+        TableColumn min = new TableColumn("Мин.");;
+        TableColumn max = new TableColumn("Макс.");;
+        TableColumn def = new TableColumn("Завод.установ.");
+        TableColumn koef = new TableColumn("Коэффициент.");;
+        TableColumn size = new TableColumn("Размер");
+        TableColumn descr = new TableColumn("Описание битов");
+        kod.setCellValueFactory(new PropertyValueFactory<GVIBase, String>("kod"));
+        name.setCellValueFactory(new PropertyValueFactory<GVIBase, String>("name"));
+        value.setCellValueFactory(new PropertyValueFactory<GVIBase, Integer>("value"));
+        unit.setCellValueFactory(new PropertyValueFactory<GVIBase, String>("unit"));
+        type.setCellValueFactory(new PropertyValueFactory<GVIBase, String>("type"));
+        view.setCellValueFactory(new PropertyValueFactory<GVIBase, String>("view"));
+        adres.setCellValueFactory(new PropertyValueFactory<GVIBase, Integer>("adres"));
+        write.setCellValueFactory(new PropertyValueFactory<GVIBase, Integer>("write"));
+        min.setCellValueFactory(new PropertyValueFactory<GVIBase, Integer>("min"));
+        max.setCellValueFactory(new PropertyValueFactory<GVIBase, Integer>("max"));
+        def.setCellValueFactory(new PropertyValueFactory<GVIBase, Integer>("def"));
+        koef.setCellValueFactory(new PropertyValueFactory<GVIBase, Integer>("koef"));
+        size.setCellValueFactory(new PropertyValueFactory<GVIBase, Integer>("size"));
+        descr.setCellValueFactory(new PropertyValueFactory<GVIBase,String>("description"));
+
+        TableView table = null;
+        int i = 0;
+        ObservableList<GVIBase> tableData = FXCollections.observableArrayList();
+        ArrayList<ObservableList> observableLists = new ArrayList<>();
+        observableLists.add(i, tableData);
+
+        for (GVIBase r : gviBaseList) {
+            Pattern pattern = Pattern.compile("\\d.0.0");
+            Matcher matcher = pattern.matcher(r.getKod());
+            if (matcher.matches()){
+                System.out.println("Вошли");
+                if (table != null) {
+                    System.out.println("Создаем Tab");
+                    Tab tab = new Tab();
+                    tab.setContent(table);
+                    tabPane.getTabs().add(tab);
+                }
+                tableData = FXCollections.observableArrayList();
+                observableLists.add(tableData);
+                table = new TableView<>(observableLists.get(i));
+                table.setEditable(true);
+                table.getColumns().addAll(kod,name,value,unit,type,view,adres,write,min,max,def,koef,size,descr);
+                i++;
+
+            }
+            tableData.add(r);
+        }
+        Tab tab = new Tab();
+        tab.setContent(table);
+        tabPane.getTabs().add(tab);
+        return tabPane;
     }
 
     //*********************************
@@ -137,112 +380,9 @@ public class Draft extends Application {
         gc.strokeOval(53,0,15,15);
     }
 
-
-    //********************
-    //Создание Меню Панели
-    //********************
-
-
-
-    public MenuBar createMenu (MenuBar menuBar){
-
-        Menu fileMenu = new Menu("File");
-        MenuItem open = new MenuItem("Open");
-        open.setOnAction(event -> {
-            FileChooser fileChooser =  new FileChooser();
-            fileChooser.setTitle("Откройте Excel файл описания");
-            fileChooser.getExtensionFilters().addAll(new FileChooser.ExtensionFilter("Excel Files", "*.xlsx", "*.xls"));
-
-            model = fileChooser.showOpenDialog(primaryStage);
-            System.out.println(model.getAbsolutePath());
-            if (model != null) {
-                if (model.getName().contains("ПБЭ")){
-                    borderPane.setCenter(workExcel.parseToApplicationGVI(model,Model,arrayTabpane));
-                    borderPane.setRight(new WorkGVI().create(null,null,textArea));
-                }
-                if (model.getName().contains("СКС")){
-                    System.out.println("СКС");
-                    borderPane.setCenter(workExcel.parseToApplicationCKC(model,Model,arrayTabpane));
-                    borderPane.setRight(new WorkCKC().create(null,null));
-                }
-            }
-        });
-        MenuItem save = new MenuItem("Save");
-        save.setOnAction(event -> {
-            textArea.appendText(userDAOImpl.createTable(userDAOImpl.connection()));
-        });
-
-        MenuItem reload =  new MenuItem("Reload");
-        reload.setOnAction(event -> {
-            readDBtest(session);
-//            textArea.appendText("Reload \n");
-//            File file = new File("C:\\javaee\\ImitIntDev\\src\\main\\resources\\ПБЭ_2.5.xlsx");
-//
-//            if (file != null) {
-//                arrayTabpane.add(0,workExcel.parseToApplicationGVI(file,Model,arrayTabpane));
-//                borderPane.setCenter(arrayTabpane.get(0));
-//                borderPane.setRight(vBox);
-//            }
-        });
-        MenuItem exit = new MenuItem("Exit");
-        exit.setOnAction(event -> {
-            UserDAOImpl.destroy();
-            System.out.println("Конец Работы Программы");
-            Platform.exit();
-            });
-        fileMenu.getItems().addAll(open,save,reload,exit);
-
-        Menu imitator = new Menu("Imitator");
-        MenuItem connect = new MenuItem("Connect");
-
-        connect.setOnAction(event -> {
-            ConnectEth connectEth = new ConnectEth(textArea,listSocket);
-            connectEth.start();
-        });
-        MenuItem disconnect = new MenuItem("Disconnect");
-        disconnect.setOnAction(event -> {
-            if (connectEth != null){
-                connectEth.cancel();
-            }
-        });
-        MenuItem test = new MenuItem("test");
-        test.setOnAction(event -> {
-            serviceConcurrent = new ServiceConcurrent(textArea);
-            serviceConcurrent.textArea = textArea;
-            serviceConcurrent.start();
-        });
-        MenuItem stop1 = new MenuItem("stoptest");
-        stop1.setOnAction(event -> {
-            if (serviceConcurrent!=null){
-                serviceConcurrent.cancel();
-            }
-        });
-        MenuItem sendMessage = new MenuItem("SendMessage");
-        sendMessage.setOnAction(event -> {
-            TextField textField = new TextField();
-            Button send = new Button("Send");
-            send.setOnAction(event1 -> {
-                if (listSocket.size()>0 ){
-                    listSocket.get(0).sendMessage(textField.getText());
-                    //connectEth.sendMessage(listSocket.get(0),textField.getText());
-                    textField.clear();
-                } else {
-                    textArea.appendText("Нет ни одного соединения" + listSocket.size());
-                }
-            });
-            FlowPane flowPane = new FlowPane();
-            flowPane.getChildren().addAll(textField,send);
-            borderPane.setCenter(flowPane);
-        });
-        MenuItem run = new MenuItem("Run");
-        MenuItem stop = new MenuItem("Stop");
-        run.setDisable(true);
-        stop.setDisable(true);
-        imitator.getItems().addAll(connect,disconnect,test,stop1,sendMessage,run,stop);
-        menuBar = new MenuBar();
-        menuBar.getMenus().addAll(fileMenu,imitator);
-        return menuBar;
-    }
+    //*********************************
+    //Создание дерева (тест)
+    //*********************************
 
     public TreeItem createTreate (){
 
@@ -261,7 +401,7 @@ public class Draft extends Application {
         sensorPress.getChildren().add(new TreeItem<>("Yokogawa"));
 
 
-       // model.getChildren().addAll(gateValve,sensorGas,sensorLevel,sensorPress);
+        // model.getChildren().addAll(gateValve,sensorGas,sensorLevel,sensorPress);
 
         TreeView <String> treeView = new TreeView<>(model);
         System.out.println(treeView.getTreeItem(0));
@@ -273,36 +413,9 @@ public class Draft extends Application {
                 textArea.appendText("Select " + newValue.getValue() + "\n");
             }
         });
-       // treeView.setShowRoot(true);
+        // treeView.setShowRoot(true);
         return model;
     }
-
-
-    //********************
-    //***Чтение из БД*****
-    //********************
-
-    public void readDBtest(Session session){
-
-        session.beginTransaction();
-//        List<ru.model.Model> modelList = s.createQuery("from Model").list();
-//        for (ru.model.Model r : modelList) {
-//            System.out.println(r.toString());
-//        }
-        List<GVIBase> gviBaseList = session.createQuery("from GVIBase").list();
-        for (GVIBase r : gviBaseList) {
-            System.out.println(r.toString());
-        }
-//        s.getTransaction().commit();
-        session.close();
-    }
-
-//        log.info("==============GET=================");
-//         Session session = sessionFactory.getCurrentSession();
-//        session.beginTransaction();
-//        Region region = (Region) session.get(Region.class, id);
-//        log.info("region = {}", region);
-//        session.getTransaction().commit();
 
 
 }

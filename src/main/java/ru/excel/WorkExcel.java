@@ -5,6 +5,8 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
+import net.wimpi.modbus.procimg.SimpleProcessImage;
+import net.wimpi.modbus.procimg.SimpleRegister;
 import org.apache.log4j.Logger;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
@@ -77,7 +79,7 @@ public class WorkExcel {
         return result;
     }
 
-    public TabPane parseToApplicationGVI(File file, TreeView<String>treeView, ArrayList<TabPane>arrayList){
+    public TabPane parseToApplicationGVI(File file, TreeView<String>treeView, ArrayList<TabPane>arrayList, SimpleProcessImage simpleProcessImage){
 
         //**********************
         //***Create new Table***
@@ -219,6 +221,7 @@ public class WorkExcel {
                                     (int) tabCells.next().getNumericCellValue(),
                                     tabCells.next().getStringCellValue()
                                     );
+                            simpleProcessImage.setRegister(gviBase.getAdres(),new SimpleRegister(gviBase.getValue()));
                             // сохранение в БД
                             arrTab.get(i).add(gviBase);
                             gviBase.setModel(modelGVI);
