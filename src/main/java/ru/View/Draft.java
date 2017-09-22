@@ -6,12 +6,14 @@ import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.event.EventHandler;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
@@ -19,6 +21,7 @@ import javafx.scene.layout.FlowPane;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.util.converter.IntegerStringConverter;
 import net.wimpi.modbus.ModbusCoupler;
 import net.wimpi.modbus.net.ModbusTCPListener;
 import net.wimpi.modbus.procimg.SimpleProcessImage;
@@ -307,6 +310,19 @@ public class Draft extends Application {
         kod.setCellValueFactory(new PropertyValueFactory<GVIBase, String>("kod"));
         name.setCellValueFactory(new PropertyValueFactory<GVIBase, String>("name"));
         value.setCellValueFactory(new PropertyValueFactory<GVIBase, Integer>("value"));
+        value.setCellFactory(TextFieldTableCell.<GVIBase,Integer>forTableColumn(new IntegerStringConverter()));
+
+        value.setOnEditCommit(
+                new EventHandler<TableColumn.CellEditEvent<GVIBase,Integer>>() {
+                    @Override
+                    public void handle(TableColumn.CellEditEvent<GVIBase,Integer> event) {
+                        Integer integer = event.getNewValue();
+                        int row = event.getTablePosition().getRow();
+                        GVIBase gviBase = event.getTableView().getItems().get(row);
+                        gviBase.setValue(integer);
+                        System.out.println("Новое значение" + integer + event.getRowValue().toString());
+                    }
+                });
         unit.setCellValueFactory(new PropertyValueFactory<GVIBase, String>("unit"));
         type.setCellValueFactory(new PropertyValueFactory<GVIBase, String>("type"));
         view.setCellValueFactory(new PropertyValueFactory<GVIBase, String>("view"));
@@ -319,11 +335,12 @@ public class Draft extends Application {
         size.setCellValueFactory(new PropertyValueFactory<GVIBase, Integer>("size"));
         descr.setCellValueFactory(new PropertyValueFactory<GVIBase,String>("description"));
 
-        TableView table = null;
         int i = 0;
-        ObservableList<GVIBase> tableData = FXCollections.observableArrayList();
+        //final ObservableList<GVIBase> tableData = FXCollections.observableArrayList();
         ArrayList<ObservableList> observableLists = new ArrayList<>();
-        observableLists.add(i, tableData);
+        observableLists.add(i, FXCollections.observableArrayList());
+        TableView table = null;
+        ArrayList<TableView> tableViews = new ArrayList<>();
 
         for (GVIBase r : gviBaseList) {
             Pattern pattern = Pattern.compile("\\d.0.0");
@@ -333,22 +350,28 @@ public class Draft extends Application {
                 if (table != null) {
                     System.out.println("Создаем Tab");
                     Tab tab = new Tab();
-                    tab.setContent(table);
+                    tab.setText("Номер вкладки" + i);
+                    tab.setContent(tableViews.get(i-1));
                     tabPane.getTabs().add(tab);
                 }
-                tableData = FXCollections.observableArrayList();
-                observableLists.add(tableData);
+                observableLists.add(i, FXCollections.observableArrayList());
                 table = new TableView<>(observableLists.get(i));
                 table.setEditable(true);
                 table.getColumns().addAll(kod,name,value,unit,type,view,adres,write,min,max,def,koef,size,descr);
+                tableViews.add(i,table);
                 i++;
-
             }
-            tableData.add(r);
-        }
+            observableLists.get(i-1).add(r);
+        };
         Tab tab = new Tab();
+        tab.setText("Номер вкладки" + i);
         tab.setContent(table);
         tabPane.getTabs().add(tab);
+        for (ObservableList<GVIBase>observableLists1 : observableLists){
+            for (GVIBase gviBase : observableLists1){
+                System.out.println(gviBase.toString());
+            }
+        }
         return tabPane;
     }
 
@@ -399,7 +422,6 @@ public class Draft extends Application {
 
         TreeItem <String> sensorPress = new TreeItem<>("Датчики Давления");
         sensorPress.getChildren().add(new TreeItem<>("Yokogawa"));
-
 
         // model.getChildren().addAll(gateValve,sensorGas,sensorLevel,sensorPress);
 
