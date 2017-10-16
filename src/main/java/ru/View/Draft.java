@@ -39,6 +39,7 @@ import ru.algoritms.WorkGVI;
 import ru.connect.ConnectEth;
 import ru.excel.WorkExcel;
 import ru.model.GVIBase;
+import ru.model.Model;
 
 import java.io.File;
 import java.net.InetAddress;
@@ -46,8 +47,6 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class Draft extends Application {
 
@@ -107,7 +106,7 @@ public class Draft extends Application {
         borderPane = new BorderPane();
         borderPane.setTop(createMenu(menuBar));
         borderPane.setBottom(textArea);
-        borderPane.setLeft(Model = new TreeView<>(createTreate()));
+        borderPane.setLeft(Model = new TreeView<>(createTreateFromDB()));
         System.out.println(Model.getTreeItem(0));
         primaryStage.setScene(new Scene(borderPane, 1024, 768));
 
@@ -134,8 +133,8 @@ public class Draft extends Application {
         System.out.println("Init");
         textArea = new TextArea();
         textArea.appendText("Init\n");
-        UserDAOImpl.init();
-        session = UserDAOImpl.sessionFactory.getCurrentSession();
+//        UserDAOImpl.init();
+//        session = UserDAOImpl.sessionFactory.getCurrentSession();
 
     }
 
@@ -336,42 +335,48 @@ public class Draft extends Application {
         descr.setCellValueFactory(new PropertyValueFactory<GVIBase,String>("description"));
 
         int i = 0;
-        //final ObservableList<GVIBase> tableData = FXCollections.observableArrayList();
-        ArrayList<ObservableList> observableLists = new ArrayList<>();
-        observableLists.add(i, FXCollections.observableArrayList());
-        TableView table = null;
-        ArrayList<TableView> tableViews = new ArrayList<>();
-
-        for (GVIBase r : gviBaseList) {
-            Pattern pattern = Pattern.compile("\\d.0.0");
-            Matcher matcher = pattern.matcher(r.getKod());
-            if (matcher.matches()){
-                System.out.println("Вошли");
-                if (table != null) {
-                    System.out.println("Создаем Tab");
-                    Tab tab = new Tab();
-                    tab.setText("Номер вкладки" + i);
-                    tab.setContent(tableViews.get(i-1));
-                    tabPane.getTabs().add(tab);
-                }
-                observableLists.add(i, FXCollections.observableArrayList());
-                table = new TableView<>(observableLists.get(i));
-                table.setEditable(true);
-                table.getColumns().addAll(kod,name,value,unit,type,view,adres,write,min,max,def,koef,size,descr);
-                tableViews.add(i,table);
-                i++;
-            }
-            observableLists.get(i-1).add(r);
-        };
+//        final ObservableList<GVIBase> tableData = FXCollections.observableArrayList();
+//        ArrayList<ObservableList> observableLists = new ArrayList<>();
+//        observableLists.add(i, FXCollections.observableArrayList());
+        ObservableList<GVIBase> observableList = FXCollections.observableArrayList();
+        TableView table = new TableView<>(observableList);
+        table.setEditable(true);
+        table.getColumns().addAll(kod,name,value,unit,type,view,adres,write,min,max,def,koef,size,descr);
+//        ArrayList<TableView> tableViews = new ArrayList<>();
         Tab tab = new Tab();
-        tab.setText("Номер вкладки" + i);
+        tab.setText("ЗадвижкаПБЭ");
         tab.setContent(table);
         tabPane.getTabs().add(tab);
-        for (ObservableList<GVIBase>observableLists1 : observableLists){
-            for (GVIBase gviBase : observableLists1){
-                System.out.println(gviBase.toString());
-            }
-        }
+        for (GVIBase r : gviBaseList) {
+//            Pattern pattern = Pattern.compile("\\d.0.0");
+//            Matcher matcher = pattern.matcher(r.getKod());
+//            if (matcher.matches()){
+//                System.out.println("Вошли");
+//                if (table != null) {
+//                    System.out.println("Создаем Tab");
+//                    Tab tab = new Tab();
+//                    tab.setText("ЗадвижкаПБЭ");
+//                    tab.setContent(tableViews.get(i-1));
+//                    tabPane.getTabs().add(tab);
+//                }
+//                observableLists.add(i, FXCollections.observableArrayList());
+//                table = new TableView<>(observableLists.get(i));
+//                table.setEditable(true);
+//                table.getColumns().addAll(kod,name,value,unit,type,view,adres,write,min,max,def,koef,size,descr);
+//                tableViews.add(i,table);
+//                i++;
+//            }
+            observableList.add(r);
+        };
+        //Tab tab = new Tab();
+        //tab.setText("Номер вкладки" + i);
+        //tab.setContent(table);
+        //tabPane.getTabs().add(tab);
+//        for (ObservableList<GVIBase>observableLists1 : observableLists){
+//            for (GVIBase gviBase : observableLists1){
+//                System.out.println(gviBase.toString());
+//            }
+//        }
         return tabPane;
     }
 
@@ -437,6 +442,53 @@ public class Draft extends Application {
         });
         // treeView.setShowRoot(true);
         return model;
+    }
+
+    public TreeItem createTreateFromDB(){
+
+        TreeItem <String> model = new TreeItem<>("Модели");
+
+
+        UserDAOImpl.init();
+        Session session = UserDAOImpl.sessionFactory.getCurrentSession();
+        session.beginTransaction();
+        //****Задвижки******
+        Criteria userCriteria = session.createCriteria(Model.class);
+        userCriteria.add(Restrictions.eq("modelName", "Задвижки"));
+        //List<GVIBase> gviBaseList = session.createQuery("from GVIBase").list();
+        List<Model> modelList = userCriteria.list();
+        modelList.sort(Comparator.comparing(ru.model.Model::getModelId));
+        TreeItem <String> gateValve = new TreeItem<>("Задвижки");
+        for (Model m: modelList){
+            gateValve.getChildren().add(new TreeItem<>("Mодель №" + m.getModelId() + "-Тип " + m.getDescription()));
+        }
+        //******CKC*******
+        userCriteria = session.createCriteria(Model.class);
+        userCriteria.add(Restrictions.eq("modelName", "СКС"));
+        //List<GVIBase> gviBaseList = session.createQuery("from GVIBase").list();
+        modelList = userCriteria.list();
+        modelList.sort(Comparator.comparing(ru.model.Model::getModelId));
+        TreeItem <String> ckc = new TreeItem<>("СКС");
+        for (Model m: modelList){
+            ckc.getChildren().add(new TreeItem<>("№" + m.getModelId() + "-Тип " + m.getDescription()));
+        }
+
+        TreeView <String> treeView = new TreeView<>(model);
+        System.out.println(treeView.getTreeItem(0));
+        MultipleSelectionModel <TreeItem<String>> treeSelModel = treeView.getSelectionModel();
+        treeSelModel.selectedItemProperty().addListener(new ChangeListener<TreeItem<String>>() {
+            @Override
+            public void changed(ObservableValue<? extends TreeItem<String>> observable, TreeItem<String> oldValue, TreeItem<String> newValue) {
+                borderPane.setCenter(new TextField(newValue.getValue()));
+                textArea.appendText("Select " + newValue.getValue() + "\n");
+            }
+        });
+        treeView.setShowRoot(true);
+
+        model.getChildren().addAll(gateValve, ckc);
+        session.getTransaction().commit();
+        return model;
+
     }
 
 
