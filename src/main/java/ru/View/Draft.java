@@ -16,6 +16,7 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.paint.Color;
@@ -67,6 +68,7 @@ public class Draft extends Application {
     private static final Logger log = Logger.getLogger(Draft.class);
     protected SimpleProcessImage simpleProcessImage;
     protected ModbusTCPListener listener;
+    private TreeView treeView;
 
 
     public final int DEFAULT_UNIT_ID = 1;
@@ -106,8 +108,8 @@ public class Draft extends Application {
         borderPane = new BorderPane();
         borderPane.setTop(createMenu(menuBar));
         borderPane.setBottom(textArea);
-        borderPane.setLeft(Model = new TreeView<>(createTreateFromDB()));
-        System.out.println(Model.getTreeItem(0));
+        treeView = createTreateFromDB();
+        borderPane.setLeft(treeView);
         primaryStage.setScene(new Scene(borderPane, 1024, 768));
 
         //********************************
@@ -444,28 +446,30 @@ public class Draft extends Application {
         return model;
     }
 
-    public TreeItem createTreateFromDB(){
+    public TreeView createTreateFromDB(){
 
         TreeItem <String> model = new TreeItem<>("Модели");
-
+        log.debug("Создаем Ветки");
 
         UserDAOImpl.init();
         Session session = UserDAOImpl.sessionFactory.getCurrentSession();
         session.beginTransaction();
+
+
         //****Задвижки******
         Criteria userCriteria = session.createCriteria(Model.class);
         userCriteria.add(Restrictions.eq("modelName", "Задвижки"));
-        //List<GVIBase> gviBaseList = session.createQuery("from GVIBase").list();
         List<Model> modelList = userCriteria.list();
         modelList.sort(Comparator.comparing(ru.model.Model::getModelId));
         TreeItem <String> gateValve = new TreeItem<>("Задвижки");
         for (Model m: modelList){
             gateValve.getChildren().add(new TreeItem<>("Mодель №" + m.getModelId() + "-Тип " + m.getDescription()));
         }
+
+
         //******CKC*******
         userCriteria = session.createCriteria(Model.class);
         userCriteria.add(Restrictions.eq("modelName", "СКС"));
-        //List<GVIBase> gviBaseList = session.createQuery("from GVIBase").list();
         modelList = userCriteria.list();
         modelList.sort(Comparator.comparing(ru.model.Model::getModelId));
         TreeItem <String> ckc = new TreeItem<>("СКС");
@@ -473,21 +477,21 @@ public class Draft extends Application {
             ckc.getChildren().add(new TreeItem<>("№" + m.getModelId() + "-Тип " + m.getDescription()));
         }
 
-        TreeView <String> treeView = new TreeView<>(model);
-        System.out.println(treeView.getTreeItem(0));
-        MultipleSelectionModel <TreeItem<String>> treeSelModel = treeView.getSelectionModel();
-        treeSelModel.selectedItemProperty().addListener(new ChangeListener<TreeItem<String>>() {
-            @Override
-            public void changed(ObservableValue<? extends TreeItem<String>> observable, TreeItem<String> oldValue, TreeItem<String> newValue) {
-                borderPane.setCenter(new TextField(newValue.getValue()));
-                textArea.appendText("Select " + newValue.getValue() + "\n");
-            }
-        });
-        treeView.setShowRoot(true);
 
         model.getChildren().addAll(gateValve, ckc);
         session.getTransaction().commit();
-        return model;
+        TreeView <String> treeView = new TreeView<>(model);
+        treeView.setOnMouseClicked(new EventHandler<MouseEvent>() {
+            @Override
+            public void handle(MouseEvent event) {
+                if(event.getClickCount() == 2){
+                    log.debug("Выбрали "+ treeView.getSelectionModel().getSelectedItem().getValue());
+               }
+            }
+        });
+
+
+        return treeView;
 
     }
 
