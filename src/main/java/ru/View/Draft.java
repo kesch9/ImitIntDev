@@ -48,6 +48,9 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Draft extends Application {
 
@@ -57,9 +60,9 @@ public class Draft extends Application {
     ConnectEth connectEth;
     private ServiceConcurrent serviceConcurrent;
     ArrayList<ServerThread> listSocket = new ArrayList<>();
-    private Stage primaryStage;
+    public Stage primaryStage;
     private File model;
-    private BorderPane borderPane;
+    public BorderPane borderPane;
     WorkExcel workExcel = new WorkExcel();
     ArrayList<TabPane> arrayTabpane = new ArrayList<>();
     //VBox vBox;
@@ -165,7 +168,6 @@ public class Draft extends Application {
             fileChooser.getExtensionFilters().addAll(new FileChooser.ExtensionFilter("Excel Files", "*.xlsx", "*.xls"));
 
             model = fileChooser.showOpenDialog(primaryStage);
-            System.out.println(model.getAbsolutePath());
             if (model != null) {
                 if (model.getName().contains("ПБЭ")){
                     borderPane.setCenter(workExcel.parseToApplicationGVI(model,Model,arrayTabpane,simpleProcessImage));
@@ -185,7 +187,7 @@ public class Draft extends Application {
 
         MenuItem reload =  new MenuItem("Reload");
         reload.setOnAction(event -> {
-            readDBtest();
+            readDBtest(Long.valueOf(35));
         });
 
         MenuItem exit = new MenuItem("Exit");
@@ -201,11 +203,30 @@ public class Draft extends Application {
         fileMenu.getItems().addAll(open,save,reload,exit);
 
         Menu imitator = new Menu("Imitator");
-        MenuItem connect = new MenuItem("Connect");
+        MenuItem connect = new MenuItem("Connect ModbusTCP");
 
         connect.setOnAction(event -> {
             //ConnectEth connectEth = new ConnectEth(textArea,listSocket);
             //connectEth.start();
+            TextInputDialog dialog = new TextInputDialog("1");
+            dialog.setTitle("Ввод адреса устройства");
+            dialog.setContentText("Введите адрес имитируемого устройства (1-255)");
+
+            // Traditional way to get the response value.
+            Optional<String> result = dialog.showAndWait();
+            if (result.isPresent()){
+                try {
+                    ModbusCoupler.getReference().setUnitID(Integer.valueOf(result.get()));
+                    log.debug("ID устройства изменен на " + ModbusCoupler.getReference().getUnitID());
+                } catch (NumberFormatException e){
+                    Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                    alert.setTitle("Ошибка ввода");
+                    alert.setHeaderText(null);
+                    alert.setContentText("Вы ввели не число, id устройство останется по умолчанию ID=1");
+                    alert.showAndWait();
+                }
+            }
+
             try {
                 listener = new ModbusTCPListener(3, InetAddress.getByName("192.168.1.2"));
             } catch (UnknownHostException e) {
@@ -220,7 +241,7 @@ public class Draft extends Application {
             }
 
         });
-        MenuItem disconnect = new MenuItem("Disconnect");
+        MenuItem disconnect = new MenuItem("Disconnect ModbusTCP");
         disconnect.setOnAction(event -> {
             if (connectEth != null){
                 connectEth.cancel();
@@ -275,13 +296,13 @@ public class Draft extends Application {
     //***Чтение из БД*****
     //********************
 
-    public void readDBtest(){
+    public void readDBtest(Long id){
 
         UserDAOImpl.init();
         Session session = UserDAOImpl.sessionFactory.getCurrentSession();
         session.beginTransaction();
         Criteria userCriteria = session.createCriteria(GVIBase.class);
-        userCriteria.add(Restrictions.eq("model.modelId", Long.valueOf(35)));
+        userCriteria.add(Restrictions.eq("model.modelId", id));
         //List<GVIBase> gviBaseList = session.createQuery("from GVIBase").list();
         List<GVIBase> gviBaseList = userCriteria.list();
         gviBaseList.sort(Comparator.comparing(GVIBase::getGviId));
@@ -463,7 +484,7 @@ public class Draft extends Application {
         modelList.sort(Comparator.comparing(ru.model.Model::getModelId));
         TreeItem <String> gateValve = new TreeItem<>("Задвижки");
         for (Model m: modelList){
-            gateValve.getChildren().add(new TreeItem<>("Mодель №" + m.getModelId() + "-Тип " + m.getDescription()));
+            gateValve.getChildren().add(new TreeItem<>("Mодель №" + m.getModelId() + " Тип " + m.getDescription()));
         }
 
 
@@ -474,7 +495,7 @@ public class Draft extends Application {
         modelList.sort(Comparator.comparing(ru.model.Model::getModelId));
         TreeItem <String> ckc = new TreeItem<>("СКС");
         for (Model m: modelList){
-            ckc.getChildren().add(new TreeItem<>("№" + m.getModelId() + "-Тип " + m.getDescription()));
+            ckc.getChildren().add(new TreeItem<>("№" + m.getModelId() + " Тип " + m.getDescription()));
         }
 
 
@@ -485,11 +506,36 @@ public class Draft extends Application {
             @Override
             public void handle(MouseEvent event) {
                 if(event.getClickCount() == 2){
+
                     log.debug("Выбрали "+ treeView.getSelectionModel().getSelectedItem().getValue());
+                    Pattern pattern = Pattern.compile("\\d+");
+                    Matcher matcher = pattern.matcher(treeView.getSelectionModel().getSelectedItem().getValue());
+                    if (matcher.find()){
+                        //log.debug(matcher.group());
+                        int id = Integer.valueOf(matcher.group());
+                        UserDAOImpl.init();
+                        Session session = UserDAOImpl.sessionFactory.getCurrentSession();
+                        session.beginTransaction();
+                        Criteria userCriteria = session.createCriteria(Model.class);
+                        userCriteria.add(Restrictions.eq("modelId", Long.valueOf(id)));
+                        Model model = (Model) userCriteria.uniqueResult();
+                        log.debug("Считали модель " + model.getDescription() + " id " + model.getModelId() + model.getModelName());
+
+                        if (model.getModelName().equals("Задвижки")) {
+                            log.debug("Выбрали Задвижку");
+                            readDBtest(Long.valueOf(model.getModelId()));
+
+                        }
+                        if (model.getModelName().equals("СКС")){
+                            log.debug("Выбрали Задвижку");
+
+                        }
+                        session.getTransaction().commit();
+                    }
+
                }
             }
         });
-
 
         return treeView;
 

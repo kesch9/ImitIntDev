@@ -26,7 +26,32 @@ public class Model implements Serializable {
     @OrderBy(value = "freqtrn")
     private List<FreqTrnsBase> freqTrnsBaseList;
 
+    public List<GVIBase> getGviBaseList() {
+        return gviBaseList;
+    }
+
+    public void setGviBaseList(List<GVIBase> gviBaseList) {
+        this.gviBaseList = gviBaseList;
+    }
+
+    public List<CKCBase> getCkcBaseList() {
+        return ckcBaseList;
+    }
+
+    public void setCkcBaseList(List<CKCBase> ckcBaseList) {
+        this.ckcBaseList = ckcBaseList;
+    }
+
+    public List<FreqTrnsBase> getFreqTrnsBaseList() {
+        return freqTrnsBaseList;
+    }
+
+    public void setFreqTrnsBaseList(List<FreqTrnsBase> freqTrnsBaseList) {
+        this.freqTrnsBaseList = freqTrnsBaseList;
+    }
+
     public Model(String modelName, String description) {
+
         this.modelName = modelName;
         this.description = description;
     }
