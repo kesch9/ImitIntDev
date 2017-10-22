@@ -22,6 +22,10 @@ public class CKCBase {
     @JoinColumn(name = "model_id")
     private Model model;
 
+    public CKCBase(){
+
+    }
+
     public CKCBase(Long ckcId, Double adres, String name, Double value, String description) {
         this.ckcId = ckcId;
         this.adres = adres;

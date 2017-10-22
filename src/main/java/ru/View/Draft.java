@@ -39,6 +39,7 @@ import ru.algoritms.WorkCKC;
 import ru.algoritms.WorkGVI;
 import ru.connect.ConnectEth;
 import ru.excel.WorkExcel;
+import ru.model.CKCBase;
 import ru.model.GVIBase;
 import ru.model.Model;
 
@@ -60,9 +61,9 @@ public class Draft extends Application {
     ConnectEth connectEth;
     private ServiceConcurrent serviceConcurrent;
     ArrayList<ServerThread> listSocket = new ArrayList<>();
-    public Stage primaryStage;
+    private Stage primaryStage;
     private File model;
-    public BorderPane borderPane;
+    private BorderPane borderPane;
     WorkExcel workExcel = new WorkExcel();
     ArrayList<TabPane> arrayTabpane = new ArrayList<>();
     //VBox vBox;
@@ -187,7 +188,7 @@ public class Draft extends Application {
 
         MenuItem reload =  new MenuItem("Reload");
         reload.setOnAction(event -> {
-            readDBtest(Long.valueOf(35));
+            readDBtestCKC(Long.valueOf(24));
         });
 
         MenuItem exit = new MenuItem("Exit");
@@ -226,7 +227,7 @@ public class Draft extends Application {
                     alert.showAndWait();
                 }
             }
-
+            log.debug("ID устройства " + ModbusCoupler.getReference().getUnitID());
             try {
                 listener = new ModbusTCPListener(3, InetAddress.getByName("192.168.1.2"));
             } catch (UnknownHostException e) {
@@ -296,7 +297,7 @@ public class Draft extends Application {
     //***Чтение из БД*****
     //********************
 
-    public void readDBtest(Long id){
+    public void readDBtestGVI(Long id){
 
         UserDAOImpl.init();
         Session session = UserDAOImpl.sessionFactory.getCurrentSession();
@@ -311,6 +312,23 @@ public class Draft extends Application {
         session.getTransaction().commit();
     }
 
+    public void readDBtestCKC(Long id){
+
+        UserDAOImpl.init();
+        Session session = UserDAOImpl.sessionFactory.getCurrentSession();
+        session.beginTransaction();
+        Criteria userCriteria = session.createCriteria(CKCBase.class);
+        userCriteria.add(Restrictions.eq("model.modelId", id));
+        List<CKCBase> ckcBaseList = userCriteria.list();
+        ckcBaseList.sort(Comparator.comparing(CKCBase::getCkcId));
+        borderPane.setCenter(reloadTabpaneCreateCKC(ckcBaseList));
+        //borderPane.setRight(new WorkGVI().create(null,null,textArea,simpleProcessImage));
+        session.getTransaction().commit();
+    }
+
+    //*****************************
+    //***Чтение из БД Задвижки*****
+    //*****************************
     public TabPane reloadTabpaneCreateGVI(List<GVIBase> gviBaseList){
 
         TabPane tabPane = new TabPane();
@@ -402,7 +420,50 @@ public class Draft extends Application {
 //        }
         return tabPane;
     }
+    //*****************************
+    //******Чтение из БД СКС*******
+    //*****************************
+    public TabPane reloadTabpaneCreateCKC(List<CKCBase> ckcBaseList){
 
+        TabPane tabPane = new TabPane();
+        tabPane.setId("CKC");
+        TableColumn name = new TableColumn("Название");
+        TableColumn value = new TableColumn("Значение");
+        TableColumn adres = new TableColumn("Адрес");;
+        TableColumn descr = new TableColumn("Описание битов");
+
+        name.setCellValueFactory(new PropertyValueFactory<CKCBase, String>("name"));
+        value.setCellValueFactory(new PropertyValueFactory<CKCBase, String>("value"));
+        adres.setCellValueFactory(new PropertyValueFactory<CKCBase, Integer>("adres"));
+        descr.setCellValueFactory(new PropertyValueFactory<CKCBase,String>("description"));
+        value.setOnEditCommit(
+                new EventHandler<TableColumn.CellEditEvent<GVIBase,Integer>>() {
+                    @Override
+                    public void handle(TableColumn.CellEditEvent<GVIBase,Integer> event) {
+                        Integer integer = event.getNewValue();
+                        int row = event.getTablePosition().getRow();
+                        GVIBase gviBase = event.getTableView().getItems().get(row);
+                        gviBase.setValue(integer);
+                        System.out.println("Новое значение" + integer + event.getRowValue().toString());
+                    }
+                });
+
+        int i = 0;
+
+        ObservableList<CKCBase> observableList = FXCollections.observableArrayList();
+        TableView table = new TableView<>(observableList);
+        table.setEditable(true);
+        table.getColumns().addAll(name, adres, value, descr);
+        Tab tab = new Tab();
+        tab.setText("CKC");
+        tab.setContent(table);
+        tabPane.getTabs().add(tab);
+        for (CKCBase r : ckcBaseList) {
+
+            observableList.add(r);
+        };
+        return tabPane;
+    }
     //*********************************
     //Нарисуем задвижку (тест рисования)
     //*********************************
@@ -523,11 +584,12 @@ public class Draft extends Application {
 
                         if (model.getModelName().equals("Задвижки")) {
                             log.debug("Выбрали Задвижку");
-                            readDBtest(Long.valueOf(model.getModelId()));
+                            readDBtestGVI(Long.valueOf(model.getModelId()));
 
                         }
                         if (model.getModelName().equals("СКС")){
                             log.debug("Выбрали Задвижку");
+                            readDBtestCKC(Long.valueOf(model.getModelId()));
 
                         }
                         session.getTransaction().commit();
