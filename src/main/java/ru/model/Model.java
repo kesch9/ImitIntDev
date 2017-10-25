@@ -1,6 +1,12 @@
 package ru.model;
 
+import org.hibernate.annotations.*;
+
 import javax.persistence.*;
+import javax.persistence.CascadeType;
+import javax.persistence.Entity;
+import javax.persistence.OrderBy;
+import javax.persistence.Table;
 import java.io.Serializable;
 import java.util.List;
 
@@ -16,13 +22,16 @@ public class Model implements Serializable {
     private String modelName;
     @Column(name = "description")
     private String description;
-    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY, mappedBy = "model")
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY, mappedBy = "model",orphanRemoval = true)
+    @Cascade(org.hibernate.annotations.CascadeType.DELETE)
     @OrderBy(value = "gvi")
     private List<GVIBase> gviBaseList;
-    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY, mappedBy = "model")
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY, mappedBy = "model",orphanRemoval = true)
+    @Cascade(org.hibernate.annotations.CascadeType.DELETE)
     @OrderBy(value = "ckc")
     private List<CKCBase> ckcBaseList;
-    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY, mappedBy = "model")
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY, mappedBy = "model",orphanRemoval = true)
+    @Cascade(org.hibernate.annotations.CascadeType.DELETE)
     @OrderBy(value = "freqtrn")
     private List<FreqTrnsBase> freqTrnsBaseList;
 
@@ -83,6 +92,10 @@ public class Model implements Serializable {
 
 
     public Model() {
+    }
+
+    public Model(Long modelId) {
+        this.modelId = modelId;
     }
 
     @Override

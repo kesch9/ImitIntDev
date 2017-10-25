@@ -14,7 +14,6 @@ import org.hibernate.criterion.Restrictions;
 import ru.DAO.UserDAOImpl;
 import ru.DAO.UserDAOb;
 import ru.model.GVIBase;
-import ru.model.Model;
 
 import java.util.ArrayList;
 import java.util.Timer;
@@ -41,26 +40,59 @@ public class WorkGVI {
     boolean disAlarm = false;
 
     Integer speed = 10000;
+    Integer Status;
+    Integer Position;
+    Integer Alarm;
 
-    public void writeDB(int value, int model, String kod){
+    public void setID(Long ID) {
+        this.ID = ID;
+    }
+
+    private Long ID;
+
+    public void writeDB(int value, Long model, String kod){
         UserDAOImpl.init();
         Session session = UserDAOImpl.sessionFactory.getCurrentSession();
         session.beginTransaction();
         Criteria userCriteria = session.createCriteria(GVIBase.class);
         userCriteria.add(Restrictions.and(
-                Restrictions.eq("model.modelId",new Long(model)),
+                Restrictions.eq("model.modelId",model),
                 Restrictions.eq("kod",kod)
         ));
         GVIBase gvi = (GVIBase) userCriteria.uniqueResult();
         gvi.setValue(value);
         session.saveOrUpdate(gvi);
         session.getTransaction().commit();
-
     }
 
-    public VBox create (Model model, ArrayList<TabPane> viewModel, TextArea textArea, SimpleProcessImage simpleProcessImage) {
+    public VBox create (Long modelID, ArrayList<TabPane> viewModel, TextArea textArea, SimpleProcessImage simpleProcessImage) {
 
+        this.ID = modelID;
 
+        Session session = UserDAOImpl.sessionFactory.getCurrentSession();
+        //session.beginTransaction();
+        Criteria userCriteria = session.createCriteria(GVIBase.class);
+        userCriteria.add(Restrictions.and(
+                Restrictions.eq("model.modelId",ID),
+                Restrictions.eq("kod","0.0.7")
+        ));
+        GVIBase gviPol = (GVIBase) userCriteria.uniqueResult();
+        Position = gviPol.getValue();
+        userCriteria = session.createCriteria(GVIBase.class);
+        userCriteria.add(Restrictions.and(
+                Restrictions.eq("model.modelId",ID),
+                Restrictions.eq("kod","0.0.1")
+        ));
+        gviPol = (GVIBase) userCriteria.uniqueResult();
+        Status = gviPol.getValue();
+        userCriteria = session.createCriteria(GVIBase.class);
+        userCriteria.add(Restrictions.and(
+                Restrictions.eq("model.modelId",ID),
+                Restrictions.eq("kod","0.0.2")
+        ));
+        gviPol = (GVIBase) userCriteria.uniqueResult();
+        Alarm = gviPol.getValue();
+        //session.getTransaction().commit();
 
         tlnOpen.setAutoReverse(true);
         Button opened = new Button("Открыта");
@@ -121,13 +153,13 @@ public class WorkGVI {
             if (timer != null) {
                 timer.cancel();
             }
-            writeDB(slider.valueProperty().getValue().intValue(),35, "3.0.0");
+            writeDB(slider.valueProperty().getValue().intValue(), this.ID, "0.0.7");
             tlnOpen.stop();
             tlnClose.stop();
         });
 
 
-        slider = new Slider(0, 100,40);
+        slider = new Slider(0, 100,Position);
         slider.setShowTickLabels(true);
         slider.setShowTickMarks(true);
         keyValue = new KeyValue(slider.valueProperty(),100);
@@ -152,12 +184,12 @@ public class WorkGVI {
                 opened.setVisible(true);
                 closed.setVisible(false);
                 space.setVisible(false);
-                writeDB(slider.valueProperty().getValue().intValue(),35, "3.0.0");
+                writeDB(slider.valueProperty().getValue().intValue(),this.ID, "3.0.0");
             } else if (newValue.intValue() == 0){
                 opened.setVisible(false);
                 closed.setVisible(true);
                 space.setVisible(false);
-                writeDB(slider.valueProperty().getValue().intValue(),35, "3.0.0");
+                writeDB(slider.valueProperty().getValue().intValue(),this.ID, "3.0.0");
             } else {
                 opened.setVisible(false);
                 closed.setVisible(false);

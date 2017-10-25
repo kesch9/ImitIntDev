@@ -6,6 +6,7 @@ import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.event.Event;
 import javafx.event.EventHandler;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -16,12 +17,15 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.paint.Color;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.util.Callback;
 import javafx.util.converter.IntegerStringConverter;
 import net.wimpi.modbus.ModbusCoupler;
 import net.wimpi.modbus.net.ModbusTCPListener;
@@ -171,15 +175,21 @@ public class Draft extends Application {
             model = fileChooser.showOpenDialog(primaryStage);
             if (model != null) {
                 if (model.getName().contains("ПБЭ")){
-                    borderPane.setCenter(workExcel.parseToApplicationGVI(model,Model,arrayTabpane,simpleProcessImage));
-                    borderPane.setRight(new WorkGVI().create(null,null,textArea,simpleProcessImage));
+                    borderPane.setCenter(workExcel.parseToApplicationGVI(model,treeView,arrayTabpane,simpleProcessImage));
+                    log.debug("Добавлена Задвижка с №ID " + workExcel.getIdModel());
+                    borderPane.setRight(new WorkGVI().create(workExcel.getIdModel(),null,textArea,simpleProcessImage));
                 }
                 if (model.getName().contains("СКС")){
                     System.out.println("СКС");
-                    borderPane.setCenter(workExcel.parseToApplicationCKC(model,Model,arrayTabpane));
-                    borderPane.setRight(new WorkCKC().create(null,null));
+                    borderPane.setCenter(workExcel.parseToApplicationCKC(model,treeView,arrayTabpane));
+                    log.debug("Добавлена СКС с №ID " + workExcel.getIdModel());
+                    borderPane.setRight(new WorkCKC().create(workExcel.getIdModel(),null));
                 }
             }
+            //Доработать вызов
+            treeView = createTreateFromDB();
+            borderPane.setLeft(treeView);
+
         });
         MenuItem save = new MenuItem("Save");
         save.setOnAction(event -> {
@@ -308,7 +318,7 @@ public class Draft extends Application {
         List<GVIBase> gviBaseList = userCriteria.list();
         gviBaseList.sort(Comparator.comparing(GVIBase::getGviId));
         borderPane.setCenter(reloadTabpaneCreateGVI(gviBaseList));
-        borderPane.setRight(new WorkGVI().create(null,null,textArea,simpleProcessImage));
+        borderPane.setRight(new WorkGVI().create(id,null,textArea,simpleProcessImage));
         session.getTransaction().commit();
     }
 
@@ -322,7 +332,7 @@ public class Draft extends Application {
         List<CKCBase> ckcBaseList = userCriteria.list();
         ckcBaseList.sort(Comparator.comparing(CKCBase::getCkcId));
         borderPane.setCenter(reloadTabpaneCreateCKC(ckcBaseList));
-        //borderPane.setRight(new WorkGVI().create(null,null,textArea,simpleProcessImage));
+        borderPane.setRight(new WorkCKC().create(workExcel.getIdModel(),null));
         session.getTransaction().commit();
     }
 
@@ -360,7 +370,11 @@ public class Draft extends Application {
                         int row = event.getTablePosition().getRow();
                         GVIBase gviBase = event.getTableView().getItems().get(row);
                         gviBase.setValue(integer);
-                        System.out.println("Новое значение" + integer + event.getRowValue().toString());
+                        Session session = UserDAOImpl.sessionFactory.getCurrentSession();
+                        session.beginTransaction();
+                        session.update(gviBase);
+                        session.getTransaction().commit();
+                        System.out.println("Новое значение" + integer);
                     }
                 });
         unit.setCellValueFactory(new PropertyValueFactory<GVIBase, String>("unit"));
@@ -436,15 +450,20 @@ public class Draft extends Application {
         value.setCellValueFactory(new PropertyValueFactory<CKCBase, String>("value"));
         adres.setCellValueFactory(new PropertyValueFactory<CKCBase, Integer>("adres"));
         descr.setCellValueFactory(new PropertyValueFactory<CKCBase,String>("description"));
+        value.setCellFactory(TextFieldTableCell.<GVIBase,Integer>forTableColumn(new IntegerStringConverter()));
         value.setOnEditCommit(
-                new EventHandler<TableColumn.CellEditEvent<GVIBase,Integer>>() {
+                new EventHandler<TableColumn.CellEditEvent<CKCBase,Integer>>() {
                     @Override
-                    public void handle(TableColumn.CellEditEvent<GVIBase,Integer> event) {
+                    public void handle(TableColumn.CellEditEvent<CKCBase,Integer> event) {
                         Integer integer = event.getNewValue();
                         int row = event.getTablePosition().getRow();
-                        GVIBase gviBase = event.getTableView().getItems().get(row);
-                        gviBase.setValue(integer);
-                        System.out.println("Новое значение" + integer + event.getRowValue().toString());
+                        CKCBase ckcBase = event.getTableView().getItems().get(row);
+                        ckcBase.setValue(integer);
+                        Session session = UserDAOImpl.sessionFactory.getCurrentSession();
+                        session.beginTransaction();
+                        session.update(ckcBase);
+                        session.getTransaction().commit();
+                        System.out.println("Новое значение value =" + integer);
                     }
                 });
 
@@ -563,6 +582,8 @@ public class Draft extends Application {
         model.getChildren().addAll(gateValve, ckc);
         session.getTransaction().commit();
         TreeView <String> treeView = new TreeView<>(model);
+
+
         treeView.setOnMouseClicked(new EventHandler<MouseEvent>() {
             @Override
             public void handle(MouseEvent event) {
@@ -588,7 +609,7 @@ public class Draft extends Application {
 
                         }
                         if (model.getModelName().equals("СКС")){
-                            log.debug("Выбрали Задвижку");
+                            log.debug("Выбрали CKC");
                             readDBtestCKC(Long.valueOf(model.getModelId()));
 
                         }
@@ -598,9 +619,133 @@ public class Draft extends Application {
                }
             }
         });
-
+        treeView.setCellFactory(new Callback<TreeView<String>,TreeCell<String>>(){
+            @Override
+            public TreeCell<String> call(TreeView<String> p) {
+                return new TextFieldTreeCellImpl();
+            }
+        });
         return treeView;
 
+    }
+
+    private final class TextFieldTreeCellImpl extends TreeCell<String> {
+
+        private TextField textField;
+        private ContextMenu addMenu = new ContextMenu();
+
+        public TextFieldTreeCellImpl() {
+            MenuItem addMenuItem = new MenuItem("Delete");
+            addMenu.getItems().add(addMenuItem);
+            addMenuItem.setOnAction(new EventHandler() {
+                public void handle(Event t) {
+
+                    log.debug("Выбрали для удаления модель "+ getTreeView().getSelectionModel().getSelectedItem().getValue());
+                    Pattern pattern = Pattern.compile("\\d+");
+                    Matcher matcher = pattern.matcher(getTreeView().getSelectionModel().getSelectedItem().getValue());
+                    if (matcher.find()){
+                        int id = Integer.valueOf(matcher.group());
+                        UserDAOImpl.init();
+                        Session session = UserDAOImpl.sessionFactory.getCurrentSession();
+                        session.beginTransaction();
+                        Criteria userCriteria = session.createCriteria(Model.class);
+                        userCriteria.add(Restrictions.eq("modelId", Long.valueOf(id)));
+                        Model model = (Model) userCriteria.uniqueResult();
+                        log.debug("Считали модель " + model.getDescription() + " id " + model.getModelId() + model.getModelName());
+                        if (model.getModelName().equals("Задвижки")) {
+                            log.debug("Выбрали Задвижку");
+                            Criteria userCriteria1 = session.createCriteria(GVIBase.class);
+                            userCriteria1.add(Restrictions.eq("model.modelId", model.getModelId()));
+                            List <GVIBase> gviBase = userCriteria1.list();
+                            for (GVIBase g : gviBase){
+                                session.delete(g);
+                            }
+                            Model delModel = (Model) session.load(Model.class, model.getModelId());
+                            log.debug("Удаляем модель с ID " + delModel.getModelId());
+                            session.delete(delModel);
+
+//                            Model delModel = (Model) session.load(Model.class, model.getModelId());
+//                            log.debug("Удаляем модель с ID " + delModel.getModelId());
+//                            session.delete(delModel);
+                        }
+                        if (model.getModelName().equals("СКС")){
+                            log.debug("Выбрали CKC");
+                            Model delModel = (Model) session.load(Model.class, model.getModelId());
+                            session.delete(delModel);
+                        }
+                        session.getTransaction().commit();
+                    }
+                    treeView = createTreateFromDB();
+                    borderPane.setLeft(treeView);
+                }
+            });
+        }
+
+        @Override
+        public void startEdit() {
+            super.startEdit();
+
+            if (textField == null) {
+                createTextField();
+            }
+            setText(null);
+            setGraphic(textField);
+            textField.selectAll();
+        }
+
+        @Override
+        public void cancelEdit() {
+            super.cancelEdit();
+
+            setText((String) getItem());
+            setGraphic(getTreeItem().getGraphic());
+        }
+
+        @Override
+        public void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+
+            if (empty) {
+                setText(null);
+                setGraphic(null);
+            } else {
+                if (isEditing()) {
+                    if (textField != null) {
+                        textField.setText(getString());
+                    }
+                    setText(null);
+                    setGraphic(textField);
+                } else {
+                    setText(getString());
+                    setGraphic(getTreeItem().getGraphic());
+                    if (
+                            !getTreeItem().isLeaf()&&getTreeItem().getParent()!= null
+                            ){
+                        setContextMenu(addMenu);
+                    }
+                }
+            }
+        }
+
+        private void createTextField() {
+            textField = new TextField(getString());
+            textField.setOnKeyReleased(new EventHandler<KeyEvent>() {
+
+                @Override
+                public void handle(KeyEvent t) {
+                    if (t.getCode() == KeyCode.ENTER) {
+                        commitEdit(textField.getText());
+                    } else if (t.getCode() == KeyCode.ESCAPE) {
+                        cancelEdit();
+                    }
+                }
+            });
+
+        }
+
+        private String getString() {
+            return getItem() == null ? "" : getItem().toString();
+        }
     }
 
 

@@ -15,10 +15,10 @@ public class CKCBase {
     @Column(name = "name")
     private String name;
     @Column(name = "val")
-    private Double value;
+    private Integer value;
     @Column(name = "description")
     private String description;
-    @ManyToOne(cascade = {CascadeType.REFRESH}, fetch = FetchType.LAZY, targetEntity = Model.class)
+    @ManyToOne(cascade = {CascadeType.ALL}, fetch = FetchType.LAZY, targetEntity = Model.class)
     @JoinColumn(name = "model_id")
     private Model model;
 
@@ -26,7 +26,7 @@ public class CKCBase {
 
     }
 
-    public CKCBase(Long ckcId, Double adres, String name, Double value, String description) {
+    public CKCBase(Long ckcId, Double adres, String name, Integer value, String description) {
         this.ckcId = ckcId;
         this.adres = adres;
         this.name = name;
@@ -34,7 +34,7 @@ public class CKCBase {
         this.description = description;
     }
 
-    public CKCBase(String name, Double adres, Double value, String description) {
+    public CKCBase(String name, Double adres, Integer value, String description) {
         this.adres = adres;
         this.name = name;
         this.value = value;
@@ -73,11 +73,11 @@ public class CKCBase {
         this.name = name;
     }
 
-    public Double getValue() {
+    public Integer getValue() {
         return value;
     }
 
-    public void setValue(Double value) {
+    public void setValue(Integer value) {
         this.value = value;
     }
 

@@ -20,7 +20,7 @@ public class FreqTrnsBase {
     @Column(name = "description")
     private String description;
 
-    @ManyToOne(cascade = {CascadeType.REFRESH}, fetch = FetchType.LAZY, targetEntity = Model.class)
+    @ManyToOne(cascade = {CascadeType.ALL}, fetch = FetchType.LAZY, targetEntity = Model.class)
     @JoinColumn(name = "model_id")
     private Model model;
 

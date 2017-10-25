@@ -29,10 +29,16 @@ import java.util.regex.Pattern;
 
 public class WorkExcel {
 
+    private Long IdModel;
+
     Matcher matcher;
     Pattern pattern = Pattern.compile("X.X.X");
 
     private static final Logger log = Logger.getLogger(WorkExcel.class);
+
+    public Long getIdModel() {
+        return IdModel;
+    }
 
     public String parse(String name) {
         String result = "";
@@ -48,6 +54,7 @@ public class WorkExcel {
         Sheet sheet = wb.getSheetAt(0);
         Sheet sheet1 = wb.getSheetAt(0);
         System.out.println(sheet.isDisplayRowColHeadings());
+
         System.out.println(sheet1.getPaneInformation());
         System.out.println(sheet.getSheetName()+ wb.getNumberOfSheets());
         Iterator<Row> it = sheet.iterator();
@@ -133,12 +140,12 @@ public class WorkExcel {
 
 
         Model modelGVI = new Model("Задвижки", "Модель задвижки");
-        modelGVI.setModelId((long)1);
         log.debug(modelGVI.toString());
         UserDAOImpl.init();
         Session s = UserDAOImpl.sessionFactory.getCurrentSession();
         s.beginTransaction();
         s.save(modelGVI);
+        IdModel = modelGVI.getModelId();
         //s.getTransaction().commit();
 
         //***********************
@@ -272,7 +279,7 @@ public class WorkExcel {
         TableColumn descr = new TableColumn("Описание битов");
 
         name.setCellValueFactory(new PropertyValueFactory<CKCBase, String>("name"));
-        value.setCellValueFactory(new PropertyValueFactory<CKCBase, String>("value"));
+        value.setCellValueFactory(new PropertyValueFactory<CKCBase, Integer>("value"));
         adres.setCellValueFactory(new PropertyValueFactory<CKCBase, Integer>("adres"));
         descr.setCellValueFactory(new PropertyValueFactory<CKCBase,String>("description"));
 
@@ -289,6 +296,7 @@ public class WorkExcel {
         Session s = UserDAOImpl.sessionFactory.getCurrentSession();
         s.beginTransaction();
         s.save(modelCKC);
+        IdModel = modelCKC.getModelId();
 
         //***********************
         //***Prepare read file***
@@ -329,7 +337,7 @@ public class WorkExcel {
             CKCBase ckcBase = new CKCBase(
                     cells.next().getStringCellValue(),
                     cells.next().getNumericCellValue(),
-                    cells.next().getNumericCellValue(),
+                    (int)cells.next().getNumericCellValue(),
                     cells.next().getStringCellValue()
             );
             // сохранение в БД
